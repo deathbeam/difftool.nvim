@@ -134,7 +134,7 @@ end
 --- Diff two directories using built-in Lua implementation
 --- @param left_dir string
 --- @param right_dir string
---- @param opt vim.difftool.opt
+--- @param opt difftool.opt
 --- @return table[] list of quickfix entries
 local function diff_directories_builtin(left_dir, right_dir, opt)
   --- Helper to calculate file similarity
@@ -386,7 +386,7 @@ local M = {}
 --- Diff two files or directories
 --- @param left string
 --- @param right string
---- @param opt? vim.difftool.opt
+--- @param opt? difftool.opt
 function M.diff(left, right, opt)
   if not left or not right then
     vim.notify('Both arguments are required', vim.log.levels.ERROR)
