@@ -21,21 +21,25 @@ local layout = {
 --- Set up a consistent layout with two diff windows
 --- @param with_qf boolean whether to open the quickfix window
 local function setup_layout(with_qf)
+  local expected_win_count = with_qf and 3 or 2
   local wins = vim.api.nvim_list_wins()
   local left_valid = layout.left_win and vim.api.nvim_win_is_valid(layout.left_win)
   local right_valid = layout.right_win and vim.api.nvim_win_is_valid(layout.right_win)
+  local expected_passed = left_valid and right_valid and #wins == expected_win_count
 
-  local qf_win = nil
-  for _, win in ipairs(wins) do
-    local buf = vim.api.nvim_win_get_buf(win)
-    local ft = vim.bo[buf].filetype
-    if ft == 'quickfix' then
-      qf_win = win
+  local qf_passed = not with_qf
+  if not qf_passed and expected_passed then
+    for _, win in ipairs(wins) do
+      local buf = vim.api.nvim_win_get_buf(win)
+      local ft = vim.bo[buf].filetype
+      if ft == 'quickfix' then
+        qf_passed = true
+        break
+      end
     end
   end
 
-  local expected_win_count = with_qf and 3 or 2
-  if left_valid and right_valid and #wins == expected_win_count and (not with_qf or qf_win) then
+  if expected_passed and qf_passed then
     return false
   end
 
