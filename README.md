@@ -4,11 +4,11 @@
 ## Config
 ```lua
 {
-    method = 'builtin', -- diff method to use, 'builtin' or 'diffr'
+    method = 'auto', -- diff method to use, 'auto', 'builtin' or 'diffr'
     rename = {
         detect = false, -- whether to detect renames, can be slow on large directories. supported only with builtin method
         similarity = 0.5, -- minimum similarity for rename detection
-        max_size = 1024 * 1024, -- maximum file size for rename detection
+        chunk_size = 4096, -- maximum chunk size for rename detection
     },
     highlight = {
         A = 'DiffAdd', -- Added
@@ -20,7 +20,7 @@
 ```
 
 ## Usage
-Add this to your `gitconfig` (you can also use `DiffToolR` for implementation that uses `diff` command):
+Add this to your `gitconfig`:
 
 ```ini
 [diff]
