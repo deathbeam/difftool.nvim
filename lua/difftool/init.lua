@@ -77,6 +77,15 @@ local function diff_files(left_file, right_file, with_qf)
   vim.api.nvim_win_call(layout.right_win, vim.cmd.diffthis)
 end
 
+--- Get the path of `path` relative to `base`
+--- @param base string
+--- @param path string
+--- @return string, number
+local function relative_path(base, path)
+  local rel = vim.fn.fnamemodify(path, ':~:.')
+  return rel:gsub('^' .. vim.fn.fnamemodify(base, ':~:.'), '')
+end
+
 --- Diff two directories using external `diff` command
 --- @param left_dir string
 --- @param right_dir string
@@ -113,9 +122,7 @@ local function diff_directories_diffr(left_dir, right_dir)
         },
       })
     elseif modified_left and modified_right then
-      local rel = vim.fn
-        .fnamemodify(modified_left, ':~:.')
-        :gsub('^' .. vim.fn.fnamemodify(left_dir, ':~:.'), '')
+      local rel = vim.fs.relpath(left_dir, modified_left)
       table.insert(qf_entries, {
         filename = modified_right,
         text = 'M',
@@ -148,7 +155,7 @@ local function diff_directories_builtin(left_dir, right_dir, opt)
     end
     local chunk = fd:read(size)
     fd:close()
-    return chunk
+    return tostring(chunk)
   end
 
   --- Helper to calculate file similarity
@@ -175,7 +182,7 @@ local function diff_directories_builtin(left_dir, right_dir, opt)
     if not chunk1 or not chunk2 then
       return 0
     end
-    if vim.fn.sha256(chunk1) == vim.fn.sha256(chunk2) then
+    if chunk1 == chunk2 then
       return 1
     end
     local matches = 0
@@ -204,21 +211,23 @@ local function diff_directories_builtin(left_dir, right_dir, opt)
     end, { limit = math.huge, path = dir_path, follow = false })
 
     for _, full_path in ipairs(files) do
-      local rel_path = full_path:sub(#dir_path + 1)
-      full_path = vim.fn.resolve(full_path)
+      local rel_path = vim.fs.relpath(dir_path, full_path)
+      if rel_path then
+        full_path = vim.fn.resolve(full_path)
 
-      if vim.fn.isdirectory(full_path) == 0 then
-        all_paths[rel_path] = all_paths[rel_path] or { left = nil, right = nil }
+        if vim.fn.isdirectory(full_path) == 0 then
+          all_paths[rel_path] = all_paths[rel_path] or { left = nil, right = nil }
 
-        if is_left then
-          all_paths[rel_path].left = full_path
-          if not all_paths[rel_path].right then
-            left_only[rel_path] = full_path
-          end
-        else
-          all_paths[rel_path].right = full_path
-          if not all_paths[rel_path].left then
-            right_only[rel_path] = full_path
+          if is_left then
+            all_paths[rel_path].left = full_path
+            if not all_paths[rel_path].right then
+              left_only[rel_path] = full_path
+            end
+          else
+            all_paths[rel_path].right = full_path
+            if not all_paths[rel_path].left then
+              right_only[rel_path] = full_path
+            end
           end
         end
       end
@@ -231,6 +240,7 @@ local function diff_directories_builtin(left_dir, right_dir, opt)
 
   --- @type table<string, string>
   local renamed = {}
+  --- @type table<string, string>
   local chunk_cache = {}
 
   -- Detect possible renames
@@ -267,27 +277,38 @@ local function diff_directories_builtin(left_dir, right_dir, opt)
 
   -- Convert to quickfix entries
   for rel_path, files in pairs(all_paths) do
-    local status = 'M' -- Modified (both files exist)
-    if not files.left then
-      status = 'A' -- Added (only in right)
-      files.left = left_dir .. rel_path
-    elseif not files.right then
-      status = 'D' -- Deleted (only in left)
+    local status = nil
+    if files.left and files.right then
+      local similarity = 0
+      if opt.rename.detect then
+        similarity =
+          calculate_similarity(files.left, files.right, opt.rename.chunk_size, chunk_cache)
+      else
+        similarity = vim.fn.getfsize(files.left) == vim.fn.getfsize(files.right) and 1 or 0
+      end
+      if similarity < 1 then
+        status = renamed[rel_path] and 'R' or 'M'
+      end
+    elseif files.left then
+      status = 'D'
       files.right = right_dir .. rel_path
-    elseif renamed[rel_path] then
-      status = 'R' -- Renamed
+    elseif files.right then
+      status = 'A'
+      files.left = left_dir .. rel_path
     end
 
-    table.insert(qf_entries, {
-      filename = files.right,
-      text = status,
-      user_data = {
-        diff = true,
-        rel = rel_path,
-        left = files.left,
-        right = files.right,
-      },
-    })
+    if status then
+      table.insert(qf_entries, {
+        filename = files.right,
+        text = status,
+        user_data = {
+          diff = true,
+          rel = rel_path,
+          left = files.left,
+          right = files.right,
+        },
+      })
+    end
   end
 
   return qf_entries
