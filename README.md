@@ -20,7 +20,7 @@
 ```
 
 ## Usage
-Add this to your `gitconfig`:
+Add this to your `gitconfig` (you can also use `DiffToolR` for implementation that uses `diff` command):
 
 ```ini
 [diff]

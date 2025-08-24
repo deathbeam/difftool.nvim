@@ -375,7 +375,7 @@ local M = {}
 ---
 --- Diff method to use, either 'builtin' or 'diffr'
 --- (default: 'builtin')
---- @field method string
+--- @field method 'builtin'|'diffr'
 ---
 --- Rename detection options (supported only by 'builtin' method)
 --- @field rename difftool.opt.rename
