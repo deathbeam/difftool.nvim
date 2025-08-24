@@ -346,8 +346,6 @@ local function diff_directories(left_dir, right_dir, opt)
     return a.user_data.rel < b.user_data.rel
   end)
 
-  vim.print(qf_entries)
-
   vim.fn.setqflist({}, 'r', {
     nr = '$',
     title = 'DiffTool',
