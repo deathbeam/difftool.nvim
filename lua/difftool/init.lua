@@ -1,9 +1,9 @@
 local default_config = {
-  method = 'builtin',
+  method = 'auto',
   rename = {
     detect = false,
     similarity = 0.5,
-    max_size = 1024 * 1024,
+    chunk_size = 4096,
   },
   highlight = {
     A = 'DiffAdd',
@@ -137,57 +137,55 @@ end
 --- @param opt difftool.opt
 --- @return table[] list of quickfix entries
 local function diff_directories_builtin(left_dir, right_dir, opt)
+  -- Helper to read a chunk of a file
+  --- @param file string
+  --- @param size number
+  --- @return string? chunk or nil on error
+  local function read_chunk(file, size)
+    local fd = io.open(file, 'rb')
+    if not fd then
+      return nil
+    end
+    local chunk = fd:read(size)
+    fd:close()
+    return chunk
+  end
+
   --- Helper to calculate file similarity
   --- @param file1 string
   --- @param file2 string
+  --- @param chunk_size number
+  --- @param chunk_cache table<string, any>
   --- @return number similarity ratio (0 to 1)
-  local function calculate_similarity(file1, file2)
-    local size1 = vim.fn.getfsize(file1)
-    local size2 = vim.fn.getfsize(file2)
-
-    -- skip empty files or files with vastly different sizes
-    if size1 <= 0 or size2 <= 0 or size1 / size2 > 2 or size2 / size1 > 2 then
-      return 0
+  local function calculate_similarity(file1, file2, chunk_size, chunk_cache)
+    -- Get or read chunk for file1
+    local chunk1 = chunk_cache[file1]
+    if not chunk1 then
+      chunk1 = read_chunk(file1, chunk_size)
+      chunk_cache[file1] = chunk1
     end
 
-    -- skip large files
-    if size1 >= opt.rename.max_size or size2 >= opt.rename.max_size then
-      return 0
+    -- Get or read chunk for file2
+    local chunk2 = chunk_cache[file2]
+    if not chunk2 then
+      chunk2 = read_chunk(file2, chunk_size)
+      chunk_cache[file2] = chunk2
     end
 
-    -- Safely read files
-    local ok1, content1 = pcall(vim.fn.readfile, file1)
-    local ok2, content2 = pcall(vim.fn.readfile, file2)
-    if not ok1 or not ok2 then
+    if not chunk1 or not chunk2 then
       return 0
     end
-
-    -- count matching lines
-    local common_lines = 0
-    local total_lines = math.max(#content1, #content2)
-    if total_lines == 0 then
-      return 0
+    if vim.fn.sha256(chunk1) == vim.fn.sha256(chunk2) then
+      return 1
     end
-
-    --- @type table<string, number>
-    local seen = {}
-
-    -- build frequency map of non-empty lines
-    for _, line in ipairs(content1) do
-      if #line > 0 then
-        seen[line] = (seen[line] or 0) + 1
+    local matches = 0
+    local len = math.min(#chunk1, #chunk2)
+    for i = 1, len do
+      if chunk1:sub(i, i) == chunk2:sub(i, i) then
+        matches = matches + 1
       end
     end
-
-    -- count matching lines
-    for _, line in ipairs(content2) do
-      if #line > 0 and seen[line] and seen[line] > 0 then
-        seen[line] = seen[line] - 1
-        common_lines = common_lines + 1
-      end
-    end
-
-    return common_lines / total_lines
+    return matches / len
   end
 
   -- Create a map of all relative paths
@@ -233,6 +231,7 @@ local function diff_directories_builtin(left_dir, right_dir, opt)
 
   --- @type table<string, string>
   local renamed = {}
+  local chunk_cache = {}
 
   -- Detect possible renames
   if opt.rename.detect then
@@ -241,7 +240,8 @@ local function diff_directories_builtin(left_dir, right_dir, opt)
       local best_match = { similarity = opt.rename.similarity, path = nil }
 
       for right_rel, right_path in pairs(right_only) do
-        local similarity = calculate_similarity(left_path, right_path)
+        local similarity =
+          calculate_similarity(left_path, right_path, opt.rename.chunk_size, chunk_cache)
 
         if similarity > best_match.similarity then
           best_match = {
@@ -298,13 +298,22 @@ end
 --- @param right_dir string
 --- @param opt difftool.opt
 local function diff_directories(left_dir, right_dir, opt)
+  local method = opt.method
+  if method == 'auto' then
+    if not opt.rename.detect and vim.fn.executable('diff') == 1 then
+      method = 'diffr'
+    else
+      method = 'builtin'
+    end
+  end
+
   local qf_entries = nil
-  if opt.method == 'diffr' then
+  if method == 'diffr' then
     qf_entries = diff_directories_diffr(left_dir, right_dir)
-  elseif opt.method == 'builtin' then
+  elseif method == 'builtin' then
     qf_entries = diff_directories_builtin(left_dir, right_dir, opt)
   else
-    vim.notify('Unknown diff method: ' .. opt.method, vim.log.levels.ERROR)
+    vim.notify('Unknown diff method: ' .. method, vim.log.levels.ERROR)
     return
   end
 
@@ -347,9 +356,9 @@ local M = {}
 --- (default: `0.5`)
 --- @field similarity number
 ---
---- Maximum file size (in bytes) for rename detection
---- (default: `1024 * 1024`)
---- @field max_size number
+--- Maximum chunk size to read from files for similarity calculation
+--- (default: `4096`)
+--- @field chunk_size number
 
 --- @class difftool.opt.highlight
 --- @inlinedoc
@@ -373,9 +382,9 @@ local M = {}
 --- @class difftool.opt
 --- @inlinedoc
 ---
---- Diff method to use, either 'builtin' or 'diffr'
+--- Diff method to use
 --- (default: 'builtin')
---- @field method 'builtin'|'diffr'
+--- @field method 'auto'|'builtin'|'diffr'
 ---
 --- Rename detection options (supported only by 'builtin' method)
 --- @field rename difftool.opt.rename
