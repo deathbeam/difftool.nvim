@@ -4,7 +4,7 @@
 Table of Contents                            *difftool.nvim-table-of-contents*
 
 1. difftool                                           |difftool.nvim-difftool|
-  - Default config                              |difftool.nvim-default-config|
+  - Config                                              |difftool.nvim-config|
   - Usage                                                |difftool.nvim-usage|
 
 ==============================================================================
@@ -14,12 +14,13 @@ Table of Contents                            *difftool.nvim-table-of-contents*
 difftool --dir-diff`.
 
 
-DEFAULT CONFIG                                  *difftool.nvim-default-config*
+CONFIG                                                  *difftool.nvim-config*
 
 >lua
     {
+        method = 'builtin', -- diff method to use, 'builtin' or 'diffr'
         rename = {
-            detect = false, -- whether to detect renames, can be slow on large directories
+            detect = false, -- whether to detect renames, can be slow on large directories. supported only with builtin method
             similarity = 0.5, -- minimum similarity for rename detection
             max_size = 1024 * 1024, -- maximum file size for rename detection
         },
