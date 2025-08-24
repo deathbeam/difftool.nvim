@@ -477,6 +477,9 @@ function M.diff(left, right, opt)
     end,
   })
 
+  left = vim.fs.normalize(left)
+  right = vim.fs.normalize(right)
+
   if vim.fn.isdirectory(left) == 1 and vim.fn.isdirectory(right) == 1 then
     diff_directories(left, right, config)
   elseif vim.fn.filereadable(left) == 1 and vim.fn.filereadable(right) == 1 then
