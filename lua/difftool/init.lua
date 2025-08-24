@@ -85,63 +85,38 @@ local function diff_files(left_file, right_file, with_qf)
   vim.api.nvim_win_call(layout.right_win, vim.cmd.diffthis)
 end
 
---- Get the path of `path` relative to `base`
---- @param base string
---- @param path string
---- @return string, number
-local function relative_path(base, path)
-  local rel = vim.fn.fnamemodify(path, ':~:.')
-  return rel:gsub('^' .. vim.fn.fnamemodify(base, ':~:.'), '')
-end
-
 --- Diff two directories using external `diff` command
 --- @param left_dir string
 --- @param right_dir string
 --- @return table[] list of quickfix entries
 local function diff_directories_diffr(left_dir, right_dir)
-  local output = vim.fn.system({ 'diff', '-qr', left_dir, right_dir })
+  local output = vim.fn.system({ 'diff', '-qrN', left_dir, right_dir })
   local lines = vim.split(output, '\n')
   --- @type table[]
   local qf_entries = {}
 
   for _, line in ipairs(lines) do
-    local only_dir, only_file = line:match('^Only in ([^:]+): (.+)$')
     local modified_left, modified_right = line:match('^Files (.+) and (.+) differ$')
-    if only_dir and only_file then
-      local only_path = vim.fs.joinpath(only_dir, only_file)
-      --- @type string, string, string
-      local status, left, right, rel
-      if vim.fs.relpath(left_dir, only_dir) then
+    if modified_left and modified_right then
+      local left_exists = vim.fn.filereadable(modified_left) == 1
+      local right_exists = vim.fn.filereadable(modified_right) == 1
+      local rel = vim.fs.relpath(left_dir, modified_left)
+      local status
+      if left_exists and right_exists then
+        status = 'M'
+      elseif left_exists then
         status = 'D'
-        rel = vim.fs.joinpath(vim.fs.relpath(left_dir, only_dir), only_file)
-        left = only_path
-        right = vim.fs.joinpath(right_dir, rel)
-      else
+      elseif right_exists then
         status = 'A'
-        rel = vim.fs.joinpath(vim.fs.relpath(right_dir, only_dir), only_file)
-        left = vim.fs.joinpath(left_dir, rel)
-        right = only_path
       end
       table.insert(qf_entries, {
-        filename = right,
+        filename = modified_right,
         text = status,
         user_data = {
           diff = true,
           rel = rel,
-          left = left,
-          right = right,
-        },
-      })
-    elseif modified_left and modified_right then
-      local rel = vim.fs.relpath(left_dir, modified_left)
-      table.insert(qf_entries, {
-        filename = modified_right,
-        text = 'M',
-        user_data = {
-          diff = true,
-          rel = rel,
-          left = modified_left,
-          right = modified_right,
+          left = vim.fs.abspath(modified_left),
+          right = vim.fs.abspath(modified_right),
         },
       })
     end
