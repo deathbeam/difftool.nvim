@@ -1,4 +1,5 @@
 local default_config = {
+  method = 'builtin',
   rename = {
     detect = false,
     similarity = 0.5,
@@ -16,60 +17,6 @@ local layout = {
   left_win = nil,
   right_win = nil,
 }
-
---- Helper to calculate file similarity
---- @param file1 string
---- @param file2 string
---- @param opt vim.difftool.opt
---- @return number similarity ratio (0 to 1)
-local function calculate_similarity(file1, file2, opt)
-  local size1 = vim.fn.getfsize(file1)
-  local size2 = vim.fn.getfsize(file2)
-
-  -- skip empty files or files with vastly different sizes
-  if size1 <= 0 or size2 <= 0 or size1 / size2 > 2 or size2 / size1 > 2 then
-    return 0
-  end
-
-  -- skip large files
-  if size1 >= opt.rename.max_size or size2 >= opt.rename.max_size then
-    return 0
-  end
-
-  -- Safely read files
-  local ok1, content1 = pcall(vim.fn.readfile, file1)
-  local ok2, content2 = pcall(vim.fn.readfile, file2)
-  if not ok1 or not ok2 then
-    return 0
-  end
-
-  -- count matching lines
-  local common_lines = 0
-  local total_lines = math.max(#content1, #content2)
-  if total_lines == 0 then
-    return 0
-  end
-
-  --- @type table<string, number>
-  local seen = {}
-
-  -- build frequency map of non-empty lines
-  for _, line in ipairs(content1) do
-    if #line > 0 then
-      seen[line] = (seen[line] or 0) + 1
-    end
-  end
-
-  -- count matching lines
-  for _, line in ipairs(content2) do
-    if #line > 0 and seen[line] and seen[line] > 0 then
-      seen[line] = seen[line] - 1
-      common_lines = common_lines + 1
-    end
-  end
-
-  return common_lines / total_lines
-end
 
 --- Set up a consistent layout with two diff windows
 --- @param with_qf boolean whether to open the quickfix window
@@ -130,11 +77,119 @@ local function diff_files(left_file, right_file, with_qf)
   vim.api.nvim_win_call(layout.right_win, vim.cmd.diffthis)
 end
 
---- Diff two directories
+--- Diff two directories using external `diff` command
+--- @param left_dir string
+--- @param right_dir string
+--- @return table[] list of quickfix entries
+local function diff_directories_diffr(left_dir, right_dir)
+  local output = vim.fn.system({ 'diff', '-qr', left_dir, right_dir })
+  local lines = vim.split(output, '\n')
+  --- @type table[]
+  local qf_entries = {}
+
+  for _, line in ipairs(lines) do
+    local added = line:match('^Only in ([^:]+): (.+)$')
+    local modified_left, modified_right = line:match('^Files (.+) and (.+) differ$')
+    if added then
+      local dir, file = line:match('^Only in ([^:]+): (.+)$')
+      local status, left, right
+      if vim.fn.fnamemodify(dir, ':p') == vim.fn.fnamemodify(left_dir, ':p') then
+        status = 'D'
+        left = dir .. '/' .. file
+        right = right_dir .. '/' .. file
+      else
+        status = 'A'
+        left = left_dir .. '/' .. file
+        right = dir .. '/' .. file
+      end
+      table.insert(qf_entries, {
+        filename = right,
+        text = status,
+        user_data = {
+          diff = true,
+          rel = file,
+          left = left,
+          right = right,
+        },
+      })
+    elseif modified_left and modified_right then
+      local rel = vim.fn
+        .fnamemodify(modified_left, ':~:.')
+        :gsub('^' .. vim.fn.fnamemodify(left_dir, ':~:.'), '')
+      table.insert(qf_entries, {
+        filename = modified_right,
+        text = 'M',
+        user_data = {
+          diff = true,
+          rel = rel,
+          left = modified_left,
+          right = modified_right,
+        },
+      })
+    end
+  end
+  return qf_entries
+end
+
+--- Diff two directories using built-in Lua implementation
 --- @param left_dir string
 --- @param right_dir string
 --- @param opt vim.difftool.opt
-local function diff_directories(left_dir, right_dir, opt)
+--- @return table[] list of quickfix entries
+local function diff_directories_builtin(left_dir, right_dir, opt)
+  --- Helper to calculate file similarity
+  --- @param file1 string
+  --- @param file2 string
+  --- @return number similarity ratio (0 to 1)
+  local function calculate_similarity(file1, file2)
+    local size1 = vim.fn.getfsize(file1)
+    local size2 = vim.fn.getfsize(file2)
+
+    -- skip empty files or files with vastly different sizes
+    if size1 <= 0 or size2 <= 0 or size1 / size2 > 2 or size2 / size1 > 2 then
+      return 0
+    end
+
+    -- skip large files
+    if size1 >= opt.rename.max_size or size2 >= opt.rename.max_size then
+      return 0
+    end
+
+    -- Safely read files
+    local ok1, content1 = pcall(vim.fn.readfile, file1)
+    local ok2, content2 = pcall(vim.fn.readfile, file2)
+    if not ok1 or not ok2 then
+      return 0
+    end
+
+    -- count matching lines
+    local common_lines = 0
+    local total_lines = math.max(#content1, #content2)
+    if total_lines == 0 then
+      return 0
+    end
+
+    --- @type table<string, number>
+    local seen = {}
+
+    -- build frequency map of non-empty lines
+    for _, line in ipairs(content1) do
+      if #line > 0 then
+        seen[line] = (seen[line] or 0) + 1
+      end
+    end
+
+    -- count matching lines
+    for _, line in ipairs(content2) do
+      if #line > 0 and seen[line] and seen[line] > 0 then
+        seen[line] = seen[line] - 1
+        common_lines = common_lines + 1
+      end
+    end
+
+    return common_lines / total_lines
+  end
+
   -- Create a map of all relative paths
 
   --- @type table<string, {left: string?, right: string?}>
@@ -186,7 +241,7 @@ local function diff_directories(left_dir, right_dir, opt)
       local best_match = { similarity = opt.rename.similarity, path = nil }
 
       for right_rel, right_path in pairs(right_only) do
-        local similarity = calculate_similarity(left_path, right_path, opt)
+        local similarity = calculate_similarity(left_path, right_path)
 
         if similarity > best_match.similarity then
           best_match = {
@@ -235,6 +290,24 @@ local function diff_directories(left_dir, right_dir, opt)
     })
   end
 
+  return qf_entries
+end
+
+--- Diff two directories
+--- @param left_dir string
+--- @param right_dir string
+--- @param opt difftool.opt
+local function diff_directories(left_dir, right_dir, opt)
+  local qf_entries = nil
+  if opt.method == 'diffr' then
+    qf_entries = diff_directories_diffr(left_dir, right_dir)
+  elseif opt.method == 'builtin' then
+    qf_entries = diff_directories_builtin(left_dir, right_dir, opt)
+  else
+    vim.notify('Unknown diff method: ' .. opt.method, vim.log.levels.ERROR)
+    return
+  end
+
   -- Sort entries by filename for consistency
   table.sort(qf_entries, function(a, b)
     return a.user_data.rel < b.user_data.rel
@@ -263,7 +336,7 @@ end
 
 local M = {}
 
---- @class vim.difftool.opt.rename
+--- @class difftool.opt.rename
 --- @inlinedoc
 ---
 --- Whether to detect renames, can be slow on large directories so disable if needed
@@ -278,7 +351,7 @@ local M = {}
 --- (default: `1024 * 1024`)
 --- @field max_size number
 
---- @class vim.difftool.opt.highlight
+--- @class difftool.opt.highlight
 --- @inlinedoc
 ---
 --- Highlight group for added files
@@ -297,14 +370,18 @@ local M = {}
 --- (default: 'DiffChange')
 --- @field R string
 
---- @class vim.difftool.opt
+--- @class difftool.opt
 --- @inlinedoc
 ---
---- Rename detection options
---- @field rename vim.difftool.opt.rename
+--- Diff method to use, either 'builtin' or 'diffr'
+--- (default: 'builtin')
+--- @field method string
+---
+--- Rename detection options (supported only by 'builtin' method)
+--- @field rename difftool.opt.rename
 ---
 --- Highlight groups for different diff statuses
---- @field highlight vim.difftool.opt.highlight
+--- @field highlight difftool.opt.highlight
 
 --- Diff two files or directories
 --- @param left string
