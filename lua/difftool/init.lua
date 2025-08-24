@@ -97,26 +97,27 @@ local function diff_directories_diffr(left_dir, right_dir)
   local qf_entries = {}
 
   for _, line in ipairs(lines) do
-    local added = line:match('^Only in ([^:]+): (.+)$')
+    local only_dir, only_file = line:match('^Only in ([^:]+): (.+)$')
     local modified_left, modified_right = line:match('^Files (.+) and (.+) differ$')
-    if added then
-      local dir, file = line:match('^Only in ([^:]+): (.+)$')
+    if only_dir and only_file then
+      local only_path = only_dir .. '/' .. only_file
+      --- @type string, string, string
       local status, left, right
-      if vim.fn.fnamemodify(dir, ':p') == vim.fn.fnamemodify(left_dir, ':p') then
+      if vim.fs.relpath(left_dir, only_dir) then
         status = 'D'
-        left = dir .. '/' .. file
-        right = right_dir .. '/' .. file
+        left = only_path
+        right = right_dir .. '/' .. only_file
       else
         status = 'A'
-        left = left_dir .. '/' .. file
-        right = dir .. '/' .. file
+        left = left_dir .. '/' .. only_file
+        right = only_path
       end
       table.insert(qf_entries, {
         filename = right,
         text = status,
         user_data = {
           diff = true,
-          rel = file,
+          rel = only_file,
           left = left,
           right = right,
         },
