@@ -407,7 +407,7 @@ local M = {}
 --- @inlinedoc
 ---
 --- Diff method to use
---- (default: 'builtin')
+--- (default: 'auto')
 --- @field method 'auto'|'builtin'|'diffr'
 ---
 --- Rename detection options (supported only by 'builtin' method)
