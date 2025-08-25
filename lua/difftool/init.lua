@@ -6,6 +6,7 @@ local highlight_groups = {
 }
 
 local layout = {
+  group = nil,
   left_win = nil,
   right_win = nil,
 }
@@ -370,6 +371,25 @@ end
 
 local M = {}
 
+--- Close the diff layout and clean up
+function M.close()
+  if not layout.left_win and not layout.right_win then
+    return
+  end
+  if layout.left_win and vim.api.nvim_win_is_valid(layout.left_win) then
+    vim.api.nvim_win_close(layout.left_win, true)
+  end
+  if layout.group then
+    vim.api.nvim_del_augroup_by_id(layout.group)
+  end
+
+  layout.left_win = nil
+  layout.right_win = nil
+  layout.group = nil
+  vim.fn.setqflist({})
+  vim.cmd.cclose()
+end
+
 --- @class difftool.opt.rename
 --- @inlinedoc
 ---
@@ -403,7 +423,7 @@ local M = {}
 --- @param left string
 --- @param right string
 --- @param opt? difftool.opt
-function M.diff(left, right, opt)
+function M.open(left, right, opt)
   if not left or not right then
     vim.notify('Both arguments are required', vim.log.levels.ERROR)
     return
@@ -419,11 +439,11 @@ function M.diff(left, right, opt)
     },
   }, opt or {})
 
-  local group = vim.api.nvim_create_augroup('difftool_au', { clear = true })
+  layout.group = vim.api.nvim_create_augroup('difftool_au', { clear = true })
   local hl_id = vim.api.nvim_create_namespace('difftool_hl')
 
   vim.api.nvim_create_autocmd('BufWinEnter', {
-    group = group,
+    group = layout.group,
     pattern = 'quickfix',
     callback = function(args)
       vim.api.nvim_buf_clear_namespace(args.buf, hl_id, 0, -1)
@@ -441,9 +461,14 @@ function M.diff(left, right, opt)
   })
 
   vim.api.nvim_create_autocmd('BufWinEnter', {
-    group = group,
+    group = layout.group,
     pattern = '*',
     callback = function(args)
+      local win = vim.fn.bufwinid(args.buf)
+      if win ~= layout.left_win and win ~= layout.right_win then
+        return
+      end
+
       --- @type {idx: number, items: table[], size: number}
       local qf_info = vim.fn.getqflist({ idx = 0, items = 1, size = 1 })
       if qf_info.size == 0 then
