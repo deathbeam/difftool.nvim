@@ -1,17 +1,8 @@
-local default_config = {
-  method = 'auto',
-  ignore = {},
-  rename = {
-    detect = false,
-    similarity = 0.5,
-    chunk_size = 4096,
-  },
-  highlight = {
-    A = 'DiffAdd',
-    D = 'DiffDelete',
-    M = 'DiffText',
-    R = 'DiffChange',
-  },
+local highlight_groups = {
+  A = 'DiffAdd',
+  D = 'DiffDelete',
+  M = 'DiffText',
+  R = 'DiffChange',
 }
 
 local layout = {
@@ -102,7 +93,6 @@ local function diff_directories_diffr(left_dir, right_dir, opt)
 
   local output = vim.fn.system(args)
   local lines = vim.split(output, '\n')
-  --- @type table[]
   local qf_entries = {}
 
   for _, line in ipairs(lines) do
@@ -110,8 +100,7 @@ local function diff_directories_diffr(left_dir, right_dir, opt)
     if modified_left and modified_right then
       local left_exists = vim.fn.filereadable(modified_left) == 1
       local right_exists = vim.fn.filereadable(modified_right) == 1
-      local rel = vim.fs.relpath(left_dir, modified_left)
-      local status
+      local status = nil
       if left_exists and right_exists then
         status = 'M'
       elseif left_exists then
@@ -124,13 +113,14 @@ local function diff_directories_diffr(left_dir, right_dir, opt)
         text = status,
         user_data = {
           diff = true,
-          rel = rel,
+          rel = vim.fs.relpath(left_dir, modified_left),
           left = vim.fs.abspath(modified_left),
           right = vim.fs.abspath(modified_right),
         },
       })
     end
   end
+
   return qf_entries
 end
 
@@ -285,7 +275,6 @@ local function diff_directories_builtin(left_dir, right_dir, opt)
     end
   end
 
-  --- @type table[]
   local qf_entries = {}
 
   -- Convert to quickfix entries
@@ -382,8 +371,8 @@ local M = {}
 --- @class difftool.opt.rename
 --- @inlinedoc
 ---
---- Whether to detect renames, can be slow on large directories so disable if needed
---- (default: `true`)
+--- Whether to detect renames, can be slow on very large directories
+--- (default: `false`)
 --- @field detect boolean
 ---
 --- Minimum similarity for rename detection (0 to 1)
@@ -393,25 +382,6 @@ local M = {}
 --- Maximum chunk size to read from files for similarity calculation
 --- (default: `4096`)
 --- @field chunk_size number
-
---- @class difftool.opt.highlight
---- @inlinedoc
----
---- Highlight group for added files
---- (default: 'DiffAdd')
---- @field A string
----
---- Highlight group for deleted files
---- (default: 'DiffDelete')
---- @field D string
----
---- Highlight group for modified files
---- (default: 'DiffText')
---- @field M string
----
---- Highlight group for renamed files
---- (default: 'DiffChange')
---- @field R string
 
 --- @class difftool.opt
 --- @inlinedoc
@@ -426,9 +396,6 @@ local M = {}
 ---
 --- Rename detection options (supported only by 'builtin' method)
 --- @field rename difftool.opt.rename
----
---- Highlight groups for different diff statuses
---- @field highlight difftool.opt.highlight
 
 --- Diff two files or directories
 --- @param left string
@@ -440,7 +407,16 @@ function M.diff(left, right, opt)
     return
   end
 
-  local config = vim.tbl_deep_extend('force', {}, default_config, opt or {})
+  local config = vim.tbl_deep_extend('force', {
+    method = 'auto',
+    ignore = {},
+    rename = {
+      detect = false,
+      similarity = 0.5,
+      chunk_size = 4096,
+    },
+  }, opt or {})
+
   local group = vim.api.nvim_create_augroup('difftool_au', { clear = true })
   local hl_id = vim.api.nvim_create_namespace('difftool_hl')
 
@@ -454,10 +430,7 @@ function M.diff(left, right, opt)
       -- Map status codes to highlight groups
       for i, line in ipairs(lines) do
         local status = line:match('^(%a) ')
-
-        --- @type string?
-        local hl_group = config.highlight[status]
-
+        local hl_group = highlight_groups[status]
         if hl_group then
           vim.hl.range(args.buf, hl_id, hl_group, { i - 1, 0 }, { i - 1, 1 })
         end
