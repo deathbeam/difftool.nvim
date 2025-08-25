@@ -100,7 +100,7 @@ local function diff_directories_diffr(left_dir, right_dir, opt)
     if modified_left and modified_right then
       local left_exists = vim.fn.filereadable(modified_left) == 1
       local right_exists = vim.fn.filereadable(modified_right) == 1
-      local status = nil
+      local status = '?'
       if left_exists and right_exists then
         status = 'M'
       elseif left_exists then
@@ -281,7 +281,8 @@ local function diff_directories_builtin(left_dir, right_dir, opt)
   for rel_path, files in pairs(all_paths) do
     local status = nil
     if files.left and files.right then
-      local similarity = 0
+      --- @type number
+      local similarity
       if opt.rename.detect then
         similarity =
           calculate_similarity(files.left, files.right, opt.rename.chunk_size, chunk_cache)
@@ -330,7 +331,8 @@ local function diff_directories(left_dir, right_dir, opt)
     end
   end
 
-  local qf_entries = nil
+  --- @type table[]
+  local qf_entries
   if method == 'diffr' then
     qf_entries = diff_directories_diffr(left_dir, right_dir, opt)
   elseif method == 'builtin' then
