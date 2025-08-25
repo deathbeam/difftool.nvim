@@ -20,16 +20,10 @@ CONFIG                                                  *difftool.nvim-config*
     {
         method = 'auto', -- diff method to use, 'auto', 'builtin' or 'diffr'
         rename = {
-            detect = false, -- whether to detect renames, can be slow on large directories. supported only with builtin method
+            detect = false, -- whether to detect renames, can be slow on large directories
             similarity = 0.5, -- minimum similarity for rename detection
             chunk_size = 4096, -- maximum chunk size for rename detection
-        },
-        highlight = {
-            A = 'DiffAdd', -- Added
-            D = 'DiffDelete', -- Deleted
-            M = 'DiffText', -- Modified
-            R = 'DiffChange', -- Renamed
-        },
+        }
     }
 <
 
