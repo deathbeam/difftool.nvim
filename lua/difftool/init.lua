@@ -141,11 +141,14 @@ end
 --- @return table[] list of quickfix entries
 local function diff_directories_builtin(left_dir, right_dir, opt)
   --- Helper to check if a path matches ignore patterns
-  --- @param rel_path string
-  --- @param ignore string[]?
+  --- @param rel_path string?
+  --- @param ignore string[]
   --- @return boolean
   local function is_ignored(rel_path, ignore)
-    for _, pat in ipairs(ignore or {}) do
+    if not rel_path then
+      return false
+    end
+    for _, pat in ipairs(ignore) do
       if vim.fn.match(rel_path, pat) >= 0 then
         return true
       end
@@ -215,13 +218,14 @@ local function diff_directories_builtin(left_dir, right_dir, opt)
 
   -- Helper to process files from a directory
   local function process_files(dir_path, is_left)
-    local files = vim.fs.find(function()
-      return true
+    local files = vim.fs.find(function(name, path)
+      local rel_path = vim.fs.relpath(dir_path, vim.fs.joinpath(path, name))
+      return not is_ignored(rel_path, opt.ignore)
     end, { limit = math.huge, path = dir_path, follow = false })
 
     for _, full_path in ipairs(files) do
       local rel_path = vim.fs.relpath(dir_path, full_path)
-      if rel_path and not is_ignored(rel_path, opt.ignore) then
+      if rel_path then
         full_path = vim.fn.resolve(full_path)
 
         if vim.fn.isdirectory(full_path) == 0 then
