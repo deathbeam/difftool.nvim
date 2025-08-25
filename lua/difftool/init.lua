@@ -1,5 +1,6 @@
 local default_config = {
   method = 'auto',
+  ignore = {},
   rename = {
     detect = false,
     similarity = 0.5,
@@ -88,9 +89,18 @@ end
 --- Diff two directories using external `diff` command
 --- @param left_dir string
 --- @param right_dir string
+--- @param opt difftool.opt
 --- @return table[] list of quickfix entries
-local function diff_directories_diffr(left_dir, right_dir)
-  local output = vim.fn.system({ 'diff', '-qrN', left_dir, right_dir })
+local function diff_directories_diffr(left_dir, right_dir, opt)
+  local args = { 'diff', '-qrN' }
+  for _, pattern in ipairs(opt.ignore) do
+    table.insert(args, '-x')
+    table.insert(args, pattern)
+  end
+  table.insert(args, left_dir)
+  table.insert(args, right_dir)
+
+  local output = vim.fn.system(args)
   local lines = vim.split(output, '\n')
   --- @type table[]
   local qf_entries = {}
@@ -130,7 +140,20 @@ end
 --- @param opt difftool.opt
 --- @return table[] list of quickfix entries
 local function diff_directories_builtin(left_dir, right_dir, opt)
-  -- Helper to read a chunk of a file
+  --- Helper to check if a path matches ignore patterns
+  --- @param rel_path string
+  --- @param ignore string[]?
+  --- @return boolean
+  local function is_ignored(rel_path, ignore)
+    for _, pat in ipairs(ignore or {}) do
+      if vim.fn.match(rel_path, pat) >= 0 then
+        return true
+      end
+    end
+    return false
+  end
+
+  --- Helper to read a chunk of a file
   --- @param file string
   --- @param size number
   --- @return string? chunk or nil on error
@@ -198,7 +221,7 @@ local function diff_directories_builtin(left_dir, right_dir, opt)
 
     for _, full_path in ipairs(files) do
       local rel_path = vim.fs.relpath(dir_path, full_path)
-      if rel_path then
+      if rel_path and not is_ignored(rel_path, opt.ignore) then
         full_path = vim.fn.resolve(full_path)
 
         if vim.fn.isdirectory(full_path) == 0 then
@@ -316,7 +339,7 @@ local function diff_directories(left_dir, right_dir, opt)
 
   local qf_entries = nil
   if method == 'diffr' then
-    qf_entries = diff_directories_diffr(left_dir, right_dir)
+    qf_entries = diff_directories_diffr(left_dir, right_dir, opt)
   elseif method == 'builtin' then
     qf_entries = diff_directories_builtin(left_dir, right_dir, opt)
   else
@@ -392,6 +415,10 @@ local M = {}
 --- Diff method to use
 --- (default: 'auto')
 --- @field method 'auto'|'builtin'|'diffr'
+---
+--- List of file patterns to ignore (e.g {'.git', '*.log'})
+--- (default: `{}`)
+--- @field ignore string[]
 ---
 --- Rename detection options (supported only by 'builtin' method)
 --- @field rename difftool.opt.rename
