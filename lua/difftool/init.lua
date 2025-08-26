@@ -14,25 +14,24 @@ local layout = {
 --- Set up a consistent layout with two diff windows
 --- @param with_qf boolean whether to open the quickfix window
 local function setup_layout(with_qf)
-  local expected_win_count = with_qf and 3 or 2
-  local wins = vim.api.nvim_list_wins()
+  local wins = vim.api.nvim_tabpage_list_wins(0)
   local left_valid = layout.left_win and vim.api.nvim_win_is_valid(layout.left_win)
   local right_valid = layout.right_win and vim.api.nvim_win_is_valid(layout.right_win)
-  local expected_passed = left_valid and right_valid and #wins == expected_win_count
+  local wins_passed = left_valid and right_valid
 
   local qf_passed = not with_qf
-  if not qf_passed and expected_passed then
+  if not qf_passed and wins_passed then
     for _, win in ipairs(wins) do
       local buf = vim.api.nvim_win_get_buf(win)
       local ft = vim.bo[buf].filetype
-      if ft == 'quickfix' then
+      if ft == 'qf' then
         qf_passed = true
         break
       end
     end
   end
 
-  if expected_passed and qf_passed then
+  if wins_passed and qf_passed then
     return false
   end
 
@@ -44,6 +43,8 @@ local function setup_layout(with_qf)
   if with_qf then
     vim.cmd('botright copen')
   end
+
+  vim.api.nvim_set_current_win(layout.right_win)
 end
 
 --- Edit a file in a specific window
