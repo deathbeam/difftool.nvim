@@ -13,6 +13,12 @@
 }
 ```
 
+There are also vim.g config options:
+```lua
+vim.g.difftool_replace_diff_mode = false -- false by default, if true replaces nvim -d with DiffTool
+```
+
+
 ## Usage
 Add this to your `gitconfig`:
 
@@ -22,4 +28,11 @@ Add this to your `gitconfig`:
 
 [difftool "nvim_difftool"]
     cmd = nvim -c \"DiffTool $LOCAL $REMOTE\"
+```
+
+Or if you enabled `difftool_replace_diff_mode`:
+
+```ini
+[diff]
+    tool = nvimdiff
 ```
