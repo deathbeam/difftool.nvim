@@ -1,3 +1,22 @@
+--- @brief
+---<pre>help
+---:DiffTool {left} {right}                                           *:DiffTool*
+---Compares two directories or files side-by-side.
+---Supports directory diffing, rename detection, and highlights changes
+---in quickfix list.
+---</pre>
+---
+--- The plugin is not loaded by default; use `:packadd nvim.difftool` before invoking `:DiffTool`.
+---
+--- Example `git difftool -d` integration using `DiffTool` command:
+---
+--- ```ini
+--- [difftool "nvim_difftool"]
+---   cmd = nvim -c "packadd nvim.difftool" -c "DiffTool $LOCAL $REMOTE"
+--- [diff]
+---   tool = nvim_difftool
+--- ```
+
 local highlight_groups = {
   A = 'DiffAdd',
   D = 'DiffDelete',
@@ -40,10 +59,37 @@ local function setup_layout(with_qf)
   vim.cmd.vsplit()
   layout.right_win = vim.api.nvim_get_current_win()
 
+  -- When one of the windows is closed, clean up the layout
+  vim.api.nvim_create_autocmd('WinClosed', {
+    group = layout.group,
+    pattern = tostring(layout.left_win),
+    callback = function()
+      if layout.group and layout.left_win then
+        vim.api.nvim_del_augroup_by_id(layout.group)
+        layout.left_win = nil
+        layout.group = nil
+        vim.fn.setqflist({})
+        vim.cmd.cclose()
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd('WinClosed', {
+    group = layout.group,
+    pattern = tostring(layout.right_win),
+    callback = function()
+      if layout.group and layout.right_win then
+        vim.api.nvim_del_augroup_by_id(layout.group)
+        layout.right_win = nil
+        layout.group = nil
+        vim.fn.setqflist({})
+        vim.cmd.cclose()
+      end
+    end,
+  })
+
   if with_qf then
     vim.cmd('botright copen')
   end
-
   vim.api.nvim_set_current_win(layout.right_win)
 end
 
@@ -371,25 +417,6 @@ local function diff_directories(left_dir, right_dir, opt)
 end
 
 local M = {}
-
---- Close the diff layout and clean up
-function M.close()
-  if not layout.left_win and not layout.right_win then
-    return
-  end
-  if layout.left_win and vim.api.nvim_win_is_valid(layout.left_win) then
-    vim.api.nvim_win_close(layout.left_win, true)
-  end
-  if layout.group then
-    vim.api.nvim_del_augroup_by_id(layout.group)
-  end
-
-  layout.left_win = nil
-  layout.right_win = nil
-  layout.group = nil
-  vim.fn.setqflist({})
-  vim.cmd.cclose()
-end
 
 --- @class difftool.opt.rename
 --- @inlinedoc
