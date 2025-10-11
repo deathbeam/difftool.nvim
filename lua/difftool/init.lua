@@ -476,11 +476,7 @@ function M.open(left, right, opt)
     end
 
     local entry = qf_info.items[qf_info.idx]
-    if
-        not entry
-        or not entry.user_data
-        or not entry.user_data.diff
-    then
+    if not entry or not entry.user_data or not entry.user_data.diff then
       return nil
     end
 
