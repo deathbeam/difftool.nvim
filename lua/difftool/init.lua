@@ -36,13 +36,18 @@ local edit_in = function(winnr, file)
     local current_bufnr = vim.api.nvim_win_get_buf(winnr)
     local current = vim.fs.abspath(vim.fs.normalize(vim.api.nvim_buf_get_name(current_bufnr)))
 
+    local new_path = file and vim.fs.abspath(vim.fs.normalize(file)) or nil
+    if not new_path then
+      return current_bufnr
+    end
+
     -- Check if the current buffer is already the target file
-    if current == (file and vim.fs.abspath(vim.fs.normalize(file)) or '') then
+    if current:lower() == new_path:lower() then
       return current_bufnr
     end
 
     -- Read the file into the buffer
-    vim.cmd.edit(vim.fn.fnameescape(file))
+    vim.cmd.edit(vim.fn.fnameescape(new_path))
     return vim.api.nvim_get_current_buf()
   end)
 end
