@@ -163,14 +163,16 @@ local function diff_dirs_diffr(left_dir, right_dir, opt)
       elseif right_exists then
         status = 'A'
       end
+      local left = vim.fn.resolve(vim.fs.abspath(modified_left))
+      local right = vim.fn.resolve(vim.fs.abspath(modified_right))
       table.insert(qf_entries, {
-        filename = modified_right,
+        filename = right,
         text = status,
         user_data = {
           diff = true,
           rel = vim.fs.relpath(left_dir, modified_left),
-          left = vim.fn.resolve(vim.fs.abspath(modified_left)),
-          right = vim.fn.resolve(vim.fs.abspath(modified_right)),
+          left = left,
+          right = right,
         },
       })
     end
