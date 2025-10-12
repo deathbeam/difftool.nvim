@@ -30,6 +30,23 @@ local layout = {
   right_win = nil,
 }
 
+
+local edit_in = function(winnr, file)
+  return vim.api.nvim_win_call(winnr, function()
+    local current_bufnr = vim.api.nvim_win_get_buf(winnr)
+    local current = vim.fs.abspath(vim.fs.normalize(vim.api.nvim_buf_get_name(current_bufnr)))
+
+    -- Check if the current buffer is already the target file
+    if current == (file and vim.fs.abspath(vim.fs.normalize(file)) or '') then
+      return current_bufnr
+    end
+
+    -- Read the file into the buffer
+    vim.cmd.edit(vim.fn.fnameescape(file))
+    return vim.api.nvim_get_current_buf()
+  end)
+end
+
 local util = require('vim._core.util')
 
 --- Set up a consistent layout with two diff windows
@@ -61,34 +78,6 @@ local function setup_layout(with_qf)
   vim.cmd('rightbelow vsplit')
   layout.right_win = vim.api.nvim_get_current_win()
 
-  -- When one of the windows is closed, clean up the layout
-  vim.api.nvim_create_autocmd('WinClosed', {
-    group = layout.group,
-    pattern = tostring(layout.left_win),
-    callback = function()
-      if layout.group and layout.left_win then
-        vim.api.nvim_del_augroup_by_id(layout.group)
-        layout.left_win = nil
-        layout.group = nil
-        vim.fn.setqflist({})
-        vim.cmd.cclose()
-      end
-    end,
-  })
-  vim.api.nvim_create_autocmd('WinClosed', {
-    group = layout.group,
-    pattern = tostring(layout.right_win),
-    callback = function()
-      if layout.group and layout.right_win then
-        vim.api.nvim_del_augroup_by_id(layout.group)
-        layout.right_win = nil
-        layout.group = nil
-        vim.fn.setqflist({})
-        vim.cmd.cclose()
-      end
-    end,
-  })
-
   if with_qf then
     vim.cmd('botright copen')
   end
@@ -102,8 +91,36 @@ end
 local function diff_files(left_file, right_file, with_qf)
   setup_layout(with_qf or false)
 
-  util.edit_in(layout.left_win, left_file)
-  util.edit_in(layout.right_win, right_file)
+  local left_buf = edit_in(layout.left_win, left_file)
+  local right_buf = edit_in(layout.right_win, right_file)
+
+  -- When one of the windows is closed, clean up the layout
+  vim.api.nvim_create_autocmd('WinClosed', {
+    group = layout.group,
+    buffer = left_buf,
+    callback = function()
+      if layout.group and layout.left_win then
+        vim.api.nvim_del_augroup_by_id(layout.group)
+        layout.left_win = nil
+        layout.group = nil
+        vim.fn.setqflist({})
+        vim.cmd.cclose()
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd('WinClosed', {
+    group = layout.group,
+    buffer = right_buf,
+    callback = function()
+      if layout.group and layout.right_win then
+        vim.api.nvim_del_augroup_by_id(layout.group)
+        layout.right_win = nil
+        layout.group = nil
+        vim.fn.setqflist({})
+        vim.cmd.cclose()
+      end
+    end,
+  })
 
   vim.cmd('diffoff!')
   vim.api.nvim_win_call(layout.left_win, vim.cmd.diffthis)
@@ -472,16 +489,8 @@ function M.open(left, right, opt)
         return
       end
 
-      if layout.scheduled_diff then
-        layout.scheduled_diff.cancelled = true
-      end
-      layout.scheduled_diff = { cancelled = false }
       vim.w.lazyredraw = true
-
       vim.schedule(function()
-        if layout.scheduled_diff.cancelled then
-          return
-        end
         diff_files(entry.user_data.left, entry.user_data.right, true)
         vim.w.lazyredraw = false
       end)
