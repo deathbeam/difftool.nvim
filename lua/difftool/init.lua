@@ -34,15 +34,16 @@ local layout = {
 local edit_in = function(winnr, file)
   return vim.api.nvim_win_call(winnr, function()
     local current_bufnr = vim.api.nvim_win_get_buf(winnr)
-    local current = vim.fs.abspath(vim.fs.normalize(vim.api.nvim_buf_get_name(current_bufnr)))
 
-    local new_path = file and vim.fs.abspath(vim.fs.normalize(file)) or nil
-    if not new_path then
-      return current_bufnr
-    end
+    -- Get absolute normalized paths for comparison
+    local current_path = vim.uv.fs_realpath(vim.api.nvim_buf_get_name(current_bufnr))
+    local new_path = file and vim.uv.fs_realpath(file) or nil
 
     -- Check if the current buffer is already the target file
-    if current:lower() == new_path:lower() then
+    if not new_path or not current_path then
+      return current_bufnr
+    end
+    if current_path:lower() == new_path:lower() then
       return current_bufnr
     end
 
