@@ -7,6 +7,9 @@ Table of Contents                            *difftool.nvim-table-of-contents*
   - Config                                              |difftool.nvim-config|
   - Usage                                                |difftool.nvim-usage|
 
+  **⚠️ This repository is archived. The feature has been merged into
+  Neovim.**
+
 ==============================================================================
 1. difftool                                           *difftool.nvim-difftool*
 
