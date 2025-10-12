@@ -30,25 +30,25 @@ local layout = {
   right_win = nil,
 }
 
-
 local edit_in = function(winnr, file)
-  return vim.api.nvim_win_call(winnr, function()
-    local current_bufnr = vim.api.nvim_win_get_buf(winnr)
+  local function resolved_path(path)
+    if not path or path == '' then
+      return ''
+    end
+    return vim.fn.resolve(vim.fs.abspath(path))
+  end
 
-    -- Get absolute normalized paths for comparison
-    local current_path = vim.uv.fs_realpath(vim.api.nvim_buf_get_name(current_bufnr))
-    local new_path = file and vim.uv.fs_realpath(file) or nil
+  return vim.api.nvim_win_call(winnr, function()
+    local current_buf = vim.api.nvim_win_get_buf(winnr)
+    local current = resolved_path(vim.api.nvim_buf_get_name(current_buf))
 
     -- Check if the current buffer is already the target file
-    if not new_path or not current_path then
-      return current_bufnr
-    end
-    if current_path:lower() == new_path:lower() then
-      return current_bufnr
+    if current == resolved_path(file) then
+      return current_buf
     end
 
     -- Read the file into the buffer
-    vim.cmd.edit(vim.fn.fnameescape(new_path))
+    vim.cmd.edit(vim.fn.fnameescape(file))
     return vim.api.nvim_get_current_buf()
   end)
 end
@@ -457,7 +457,12 @@ function M.open(left, right, opt)
     end
 
     local entry = qf_info.items[qf_info.idx]
-    if not entry or not entry.user_data or not entry.user_data.diff or (bufnr and entry.bufnr ~= bufnr) then
+    if
+      not entry
+      or not entry.user_data
+      or not entry.user_data.diff
+      or (bufnr and entry.bufnr ~= bufnr)
+    then
       return nil
     end
 
