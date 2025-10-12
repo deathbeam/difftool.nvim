@@ -1,3 +1,5 @@
+> **⚠️ This repository is archived. The feature has been merged into [Neovim](https://github.com/neovim/neovim/pull/35448).**
+
 # difftool
 `DiffTool <left> <right>` command for integration with `git difftool` and `git difftool --dir-diff`.
 
