@@ -30,6 +30,7 @@ local layout = {
   right_win = nil,
 }
 
+
 local edit_in = function(winnr, file)
   return vim.api.nvim_win_call(winnr, function()
     local current_bufnr = vim.api.nvim_win_get_buf(winnr)
@@ -168,8 +169,8 @@ local function diff_dirs_diffr(left_dir, right_dir, opt)
         user_data = {
           diff = true,
           rel = vim.fs.relpath(left_dir, modified_left),
-          left = vim.uv.fs_realpath(modified_left),
-          right = vim.uv.fs_realpath(modified_right),
+          left = vim.fs.abspath(modified_left),
+          right = vim.fs.abspath(modified_right),
         },
       })
     end
@@ -253,9 +254,9 @@ local function diff_dirs_builtin(left_dir, right_dir, opt)
     for _, full_path in ipairs(files) do
       local rel_path = vim.fs.relpath(dir_path, full_path)
       if rel_path then
-        full_path = vim.uv.fs_realpath(full_path) or ''
+        full_path = vim.fn.resolve(full_path)
 
-        if full_path and vim.fn.isdirectory(full_path) == 0 then
+        if vim.fn.isdirectory(full_path) == 0 then
           all_paths[rel_path] = all_paths[rel_path] or { left = nil, right = nil }
 
           if is_left then
@@ -456,12 +457,7 @@ function M.open(left, right, opt)
     end
 
     local entry = qf_info.items[qf_info.idx]
-    if
-      not entry
-      or not entry.user_data
-      or not entry.user_data.diff
-      or (bufnr and entry.bufnr ~= bufnr)
-    then
+    if not entry or not entry.user_data or not entry.user_data.diff or (bufnr and entry.bufnr ~= bufnr) then
       return nil
     end
 
