@@ -169,8 +169,8 @@ local function diff_dirs_diffr(left_dir, right_dir, opt)
         user_data = {
           diff = true,
           rel = vim.fs.relpath(left_dir, modified_left),
-          left = vim.fs.abspath(modified_left),
-          right = vim.fs.abspath(modified_right),
+          left = vim.fn.resolve(vim.fs.abspath(modified_left)),
+          right = vim.fn.resolve(vim.fs.abspath(modified_right)),
         },
       })
     end
