@@ -12,7 +12,7 @@
 ---
 --- ```ini
 --- [difftool "nvim_difftool"]
----   cmd = nvim -c "packadd nvim.difftool" -c "DiffTool $LOCAL $REMOTE"
+---   cmd = nvim -c \"packadd nvim.difftool\" -c \"DiffTool $LOCAL $REMOTE\"
 --- [diff]
 ---   tool = nvim_difftool
 --- ```
@@ -29,6 +29,8 @@ local layout = {
   left_win = nil,
   right_win = nil,
 }
+
+local util = require('vim._core.util')
 
 --- Set up a consistent layout with two diff windows
 --- @param with_qf boolean whether to open the quickfix window
@@ -56,48 +58,13 @@ local function setup_layout(with_qf)
 
   vim.cmd.only()
   layout.left_win = vim.api.nvim_get_current_win()
-  vim.cmd.vsplit()
+  vim.cmd('rightbelow vsplit')
   layout.right_win = vim.api.nvim_get_current_win()
-
-  if with_qf then
-    vim.cmd('botright copen')
-  end
-  vim.api.nvim_set_current_win(layout.right_win)
-end
-
---- Edit a file in a specific window
---- @param winnr number
---- @param file string
---- @return number buffer number of the edited buffer
-local function edit_in(winnr, file)
-  return vim.api.nvim_win_call(winnr, function()
-    local current = vim.fs.abspath(vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(winnr)))
-
-    -- Check if the current buffer is already the target file
-    if current == (file and vim.fs.abspath(file) or '') then
-      return vim.api.nvim_get_current_buf()
-    end
-
-    -- Read the file into the buffer
-    vim.cmd.edit(vim.fn.fnameescape(file))
-    return vim.api.nvim_get_current_buf()
-  end)
-end
-
---- Diff two files
---- @param left_file string
---- @param right_file string
---- @param with_qf boolean? whether to open the quickfix window
-local function diff_files(left_file, right_file, with_qf)
-  setup_layout(with_qf or false)
-
-  local left_buf = edit_in(layout.left_win, left_file)
-  local right_buf = edit_in(layout.right_win, right_file)
 
   -- When one of the windows is closed, clean up the layout
   vim.api.nvim_create_autocmd('WinClosed', {
     group = layout.group,
-    buffer = left_buf,
+    pattern = tostring(layout.left_win),
     callback = function()
       if layout.group and layout.left_win then
         vim.api.nvim_del_augroup_by_id(layout.group)
@@ -110,7 +77,7 @@ local function diff_files(left_file, right_file, with_qf)
   })
   vim.api.nvim_create_autocmd('WinClosed', {
     group = layout.group,
-    buffer = right_buf,
+    pattern = tostring(layout.right_win),
     callback = function()
       if layout.group and layout.right_win then
         vim.api.nvim_del_augroup_by_id(layout.group)
@@ -121,6 +88,22 @@ local function diff_files(left_file, right_file, with_qf)
       end
     end,
   })
+
+  if with_qf then
+    vim.cmd('botright copen')
+  end
+  vim.api.nvim_set_current_win(layout.right_win)
+end
+
+--- Diff two files
+--- @param left_file string
+--- @param right_file string
+--- @param with_qf boolean? whether to open the quickfix window
+local function diff_files(left_file, right_file, with_qf)
+  setup_layout(with_qf or false)
+
+  util.edit_in(layout.left_win, left_file)
+  util.edit_in(layout.right_win, right_file)
 
   vim.cmd('diffoff!')
   vim.api.nvim_win_call(layout.left_win, vim.cmd.diffthis)
@@ -141,8 +124,7 @@ local function diff_dirs_diffr(left_dir, right_dir, opt)
   table.insert(args, left_dir)
   table.insert(args, right_dir)
 
-  local output = vim.fn.system(args)
-  local lines = vim.split(output, '\n')
+  local lines = vim.fn.systemlist(args)
   local qf_entries = {}
 
   for _, line in ipairs(lines) do
@@ -195,19 +177,6 @@ local function diff_dirs_builtin(left_dir, right_dir, opt)
     return false
   end
 
-  --- @param file string
-  --- @param size number
-  --- @return string? chunk or nil on error
-  local function read_chunk(file, size)
-    local fd = io.open(file, 'rb')
-    if not fd then
-      return nil
-    end
-    local chunk = fd:read(size)
-    fd:close()
-    return tostring(chunk)
-  end
-
   --- @param file1 string
   --- @param file2 string
   --- @param chunk_size number
@@ -217,14 +186,14 @@ local function diff_dirs_builtin(left_dir, right_dir, opt)
     -- Get or read chunk for file1
     local chunk1 = chunk_cache[file1]
     if not chunk1 then
-      chunk1 = read_chunk(file1, chunk_size)
+      chunk1 = util.read_chunk(file1, chunk_size)
       chunk_cache[file1] = chunk1
     end
 
     -- Get or read chunk for file2
     local chunk2 = chunk_cache[file2]
     if not chunk2 then
-      chunk2 = read_chunk(file2, chunk_size)
+      chunk2 = util.read_chunk(file2, chunk_size)
       chunk_cache[file2] = chunk2
     end
 
@@ -416,21 +385,6 @@ end
 
 local M = {}
 
---- @class difftool.opt.rename
---- @inlinedoc
----
---- Whether to detect renames, can be slow on very large directories
---- (default: `false`)
---- @field detect boolean
----
---- Minimum similarity for rename detection (0 to 1)
---- (default: `0.5`)
---- @field similarity number
----
---- Maximum chunk size to read from files for similarity calculation
---- (default: `4096`)
---- @field chunk_size number
-
 --- @class difftool.opt
 --- @inlinedoc
 ---
@@ -443,7 +397,11 @@ local M = {}
 --- @field ignore string[]
 ---
 --- Rename detection options (supported only by `builtin` method)
---- @field rename difftool.opt.rename
+--- @field rename table Controls rename detection
+---
+---   - {rename.detect} (`boolean`, default: `false`) Whether to detect renames
+---   - {rename.similarity} (`number`, default: `0.5`) Minimum similarity for rename detection (0 to 1)
+---   - {rename.chunk_size} (`number`, default: `4096`) Maximum chunk size to read from files for similarity calculation
 
 --- Diff two files or directories
 --- @param left string
@@ -468,7 +426,7 @@ function M.open(left, right, opt)
   layout.group = vim.api.nvim_create_augroup('nvim.difftool.events', { clear = true })
   local hl_id = vim.api.nvim_create_namespace('nvim.difftool.hl')
 
-  local function get_diff_entry()
+  local function get_diff_entry(bufnr)
     --- @type {idx: number, items: table[], size: number}
     local qf_info = vim.fn.getqflist({ idx = 0, items = 1, size = 1 })
     if qf_info.size == 0 then
@@ -476,7 +434,7 @@ function M.open(left, right, opt)
     end
 
     local entry = qf_info.items[qf_info.idx]
-    if not entry or not entry.user_data or not entry.user_data.diff then
+    if not entry or not entry.user_data or not entry.user_data.diff or (bufnr and entry.bufnr ~= bufnr) then
       return nil
     end
 
@@ -508,14 +466,24 @@ function M.open(left, right, opt)
   vim.api.nvim_create_autocmd('BufWinEnter', {
     group = layout.group,
     pattern = '*',
-    callback = function()
-      local entry = get_diff_entry()
+    callback = function(args)
+      local entry = get_diff_entry(args.buf)
       if not entry then
         return
       end
 
+      if layout.scheduled_diff then
+        layout.scheduled_diff.cancelled = true
+      end
+      layout.scheduled_diff = { cancelled = false }
+      vim.w.lazyredraw = true
+
       vim.schedule(function()
+        if layout.scheduled_diff.cancelled then
+          return
+        end
         diff_files(entry.user_data.left, entry.user_data.right, true)
+        vim.w.lazyredraw = false
       end)
     end,
   })
